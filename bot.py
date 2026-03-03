@@ -1,6 +1,5 @@
 import os
 import random
-import shutil
 import json
 import asyncio
 from telegram import Bot
@@ -8,37 +7,50 @@ from telegram import Bot
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 IMAGES_FOLDER = "images"
-TEMP_FOLDER = "temp"
 USERS_FILE = "users.json"
+USED_FILE = "used_images.json"
 
 
 # ---------- USER STORAGE ----------
 
 def load_users():
     if not os.path.exists(USERS_FILE):
-        print("users.json not found. Creating new file.")
         return []
 
     try:
         with open(USERS_FILE, "r") as f:
             content = f.read().strip()
-
             if not content:
-                print("users.json is empty.")
                 return []
-
             return json.loads(content)
-
-    except json.JSONDecodeError:
-        print("users.json is corrupted. Resetting.")
+    except:
         return []
+
 
 def save_users(users):
     with open(USERS_FILE, "w") as f:
         json.dump(users, f)
 
 
-# ---------- FETCH NEW USERS (NO LONG POLLING) ----------
+# ---------- USED IMAGES STORAGE ----------
+
+def load_used_images():
+    if not os.path.exists(USED_FILE):
+        return []
+
+    try:
+        with open(USED_FILE, "r") as f:
+            return json.load(f)
+    except:
+        return []
+
+
+def save_used_images(used):
+    with open(USED_FILE, "w") as f:
+        json.dump(used, f)
+
+
+# ---------- FETCH NEW USERS ----------
 
 async def fetch_new_users(bot):
     print("Checking for new subscribers...")
@@ -61,7 +73,6 @@ async def fetch_new_users(bot):
                 users.append(chat_id)
                 print(f"New user added: {chat_id}")
 
-    # Mark updates as processed
     if new_offset:
         await bot.get_updates(offset=new_offset, timeout=0)
 
@@ -69,21 +80,36 @@ async def fetch_new_users(bot):
     print("Finished checking users.")
 
 
-# ---------- IMAGE LOGIC ----------
+# ---------- IMAGE SELECTION LOGIC ----------
 
 def get_random_image():
-    images = os.listdir(IMAGES_FOLDER)
+    if not os.path.exists(IMAGES_FOLDER):
+        return None
 
-    if images:
-        return random.choice(images), IMAGES_FOLDER
+    all_images = os.listdir(IMAGES_FOLDER)
 
-    temp_images = os.listdir(TEMP_FOLDER)
+    if not all_images:
+        return None
 
-    if temp_images:
-        return random.choice(temp_images), TEMP_FOLDER
+    used_images = load_used_images()
 
-    print("❌ No images found in both folders.")
-    return None, None
+    available_images = list(set(all_images) - set(used_images))
+
+    # If all images used → reset cycle
+    if not available_images:
+        print("♻ All images used. Resetting cycle.")
+        used_images = []
+        available_images = all_images
+
+    selected = random.choice(available_images)
+
+    used_images.append(selected)
+    save_used_images(used_images)
+
+    return selected
+
+
+# ---------- SEND IMAGE ----------
 
 async def send_image_to_all(bot):
     users = load_users()
@@ -92,13 +118,13 @@ async def send_image_to_all(bot):
         print("⚠ No subscribed users found. Skipping image send.")
         return
 
-    image_name, source_folder = get_random_image()
+    image_name = get_random_image()
 
     if not image_name:
-        print("⚠ No images available. Skipping send.")
+        print("⚠ No images available.")
         return
 
-    image_path = os.path.join(source_folder, image_name)
+    image_path = os.path.join(IMAGES_FOLDER, image_name)
 
     for user in users:
         try:
@@ -111,21 +137,14 @@ async def send_image_to_all(bot):
         except Exception as e:
             print(f"Failed sending to {user}: {e}")
 
-    # Rotate image
-    if source_folder == IMAGES_FOLDER:
-        shutil.move(image_path, os.path.join(TEMP_FOLDER, image_name))
-    else:
-        shutil.move(image_path, os.path.join(IMAGES_FOLDER, image_name))
+    print(f"✅ Image '{image_name}' sent successfully.")
 
-    print("✅ Image sent successfully.")
+
 # ---------- MAIN ----------
 
 async def main():
-    
-    # Ensure folders exist
     os.makedirs(IMAGES_FOLDER, exist_ok=True)
-    os.makedirs(TEMP_FOLDER, exist_ok=True)
-    
+
     bot = Bot(token=TOKEN)
 
     await fetch_new_users(bot)
