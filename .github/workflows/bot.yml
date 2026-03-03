@@ -2,8 +2,11 @@ name: Impromptu Speaking Bot
 
 on:
   schedule:
-    - cron: '30 23 * * *'   # 5:00 AM IST (23:30 UTC)
+    - cron: "30 23 * * *" # 5:00 AM IST (23:30 UTC)
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   run-bot:
@@ -18,7 +21,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: "3.10"
 
       - name: Install Dependencies
         run: |
