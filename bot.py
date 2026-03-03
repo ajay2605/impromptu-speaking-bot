@@ -121,6 +121,11 @@ async def send_image_to_all(bot):
 # ---------- MAIN ----------
 
 async def main():
+    
+    # Ensure folders exist
+    os.makedirs(IMAGES_FOLDER, exist_ok=True)
+    os.makedirs(TEMP_FOLDER, exist_ok=True)
+    
     bot = Bot(token=TOKEN)
 
     await fetch_new_users(bot)
